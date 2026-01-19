@@ -47,9 +47,9 @@ export default function Dashboard() {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold font-heading">Recent Activity</h2>
           <Link href="/history">
-            <a className="text-sm font-medium text-primary hover:underline flex items-center">
+            <span className="text-sm font-medium text-primary hover:underline flex items-center cursor-pointer">
               View All <ChevronRight className="h-4 w-4" />
-            </a>
+            </span>
           </Link>
         </div>
 

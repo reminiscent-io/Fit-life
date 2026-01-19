@@ -25,13 +25,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             const isActive = location === item.href;
             return (
               <Link key={item.label} href={item.href}>
-                <a className={cn(
-                  "flex flex-col items-center justify-center w-full h-full space-y-1 transition-colors duration-200",
+                <div className={cn(
+                  "flex flex-col items-center justify-center w-full h-full space-y-1 transition-colors duration-200 cursor-pointer",
                   isActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
                 )}>
                   <item.icon className={cn("h-6 w-6", isActive && "stroke-[2.5px]")} />
                   <span className="text-[10px] font-medium">{item.label}</span>
-                </a>
+                </div>
               </Link>
             );
           })}
@@ -48,12 +48,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
              const isActive = location === item.href;
              return (
               <Link key={item.label} href={item.href}>
-                <a className={cn(
-                  "flex flex-col items-center justify-center p-3 mx-2 rounded-xl transition-all duration-200 hover:bg-muted",
+                <div className={cn(
+                  "flex flex-col items-center justify-center p-3 mx-2 rounded-xl transition-all duration-200 hover:bg-muted cursor-pointer",
                   isActive ? "text-primary bg-primary/10" : "text-muted-foreground"
                 )}>
                   <item.icon className={cn("h-6 w-6", isActive && "stroke-[2.5px]")} />
-                </a>
+                </div>
               </Link>
              )
           })}
