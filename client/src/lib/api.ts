@@ -217,6 +217,13 @@ class API {
     if (!res.ok) throw new Error("Failed to update profile");
     return res.json();
   }
+
+  // Exercise names for quick-add
+  async getExerciseNames(): Promise<{ name: string; usageCount: number }[]> {
+    const res = await fetch(`${this.baseURL}/exercises/names`);
+    if (!res.ok) throw new Error("Failed to get exercise names");
+    return res.json();
+  }
 }
 
 export const api = new API();
