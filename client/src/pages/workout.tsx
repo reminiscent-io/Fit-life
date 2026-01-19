@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import Layout from "@/components/layout";
 import MicButton from "@/components/mic-button";
 import ExerciseCard from "@/components/exercise-card";
+import QuickAddChips from "@/components/quick-add-chips";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Save, Plus } from "lucide-react";
 import { Link, useLocation } from "wouter";
@@ -102,6 +103,33 @@ export default function WorkoutSession() {
     deleteExerciseMutation.mutate(id);
   };
 
+  const handleQuickAdd = async (data: {
+    exerciseName: string;
+    sets: number;
+    reps: number;
+    weight?: number;
+    weightUnit: string;
+  }) => {
+    if (!currentSessionId) return;
+
+    try {
+      await createExerciseMutation.mutateAsync({
+        sessionId: currentSessionId,
+        exerciseName: data.exerciseName,
+        sets: data.sets,
+        reps: data.reps,
+        weight: data.weight,
+        weightUnit: data.weightUnit,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to add exercise",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleFinishWorkout = async () => {
     if (!currentSessionId) return;
     
@@ -181,6 +209,11 @@ export default function WorkoutSession() {
 
       {/* Mic Interface Fixed Bottom */}
       <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-background via-background to-transparent pt-20 flex flex-col items-center justify-end z-30 pointer-events-none">
+        {/* Quick Add Chips */}
+        <div className="pointer-events-auto w-full max-w-md mb-4 px-2">
+          <QuickAddChips onAddExercise={handleQuickAdd} disabled={isProcessing || !currentSessionId} />
+        </div>
+
         <div className="pointer-events-auto mb-4">
           <MicButton onRecordingComplete={handleVoiceInput} isProcessing={isProcessing} />
         </div>
