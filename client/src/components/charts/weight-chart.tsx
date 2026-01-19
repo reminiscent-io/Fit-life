@@ -7,6 +7,20 @@ interface WeightData {
 }
 
 export default function WeightChart({ data }: { data: WeightData[] }) {
+  // Handle empty data case
+  if (!data || data.length === 0) {
+    return (
+      <Card className="border-none shadow-sm bg-gradient-to-br from-card to-secondary/50">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Weight Trend</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0 flex items-center justify-center h-[200px]">
+          <p className="text-muted-foreground text-sm">No weight data yet</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   // Calculate min/max for better domain
   const weights = data.map(d => d.weight);
   const minWeight = Math.floor(Math.min(...weights) - 2);

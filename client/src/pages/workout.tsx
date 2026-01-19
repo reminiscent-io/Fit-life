@@ -1,57 +1,124 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Layout from "@/components/layout";
 import MicButton from "@/components/mic-button";
 import ExerciseCard from "@/components/exercise-card";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Save, Plus } from "lucide-react";
 import { Link, useLocation } from "wouter";
-import { mockParseResponse } from "@/lib/mockData";
 import { toast } from "@/hooks/use-toast";
-import { v4 as uuidv4 } from 'uuid';
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { api, type Exercise } from "@/lib/api";
 
 export default function WorkoutSession() {
   const [, setLocation] = useLocation();
-  const [exercises, setExercises] = useState<any[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [currentSessionId, setCurrentSessionId] = useState<number | null>(null);
+  const queryClient = useQueryClient();
 
-  const handleVoiceInput = async (text: string) => {
-    setIsProcessing(true);
-    
-    // Simulate API delay
-    setTimeout(() => {
-      const newExercise = {
-        id: uuidv4(),
-        name: mockParseResponse.exercise,
-        sets: mockParseResponse.sets,
-        reps: mockParseResponse.reps,
-        weight: mockParseResponse.weight,
-        unit: mockParseResponse.unit,
-      };
-      
-      setExercises(prev => [...prev, newExercise]);
-      setIsProcessing(false);
+  // Get or create today's session
+  const { data: todaySession } = useQuery({
+    queryKey: ["session", "today"],
+    queryFn: () => api.getTodaySession(),
+  });
+
+  const createSessionMutation = useMutation({
+    mutationFn: () => api.createSession(),
+    onSuccess: (session) => {
+      setCurrentSessionId(session.id);
+      queryClient.invalidateQueries({ queryKey: ["session", "today"] });
+    },
+  });
+
+  const createExerciseMutation = useMutation({
+    mutationFn: (data: Parameters<typeof api.createExercise>[0]) => api.createExercise(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["session", "today"] });
       toast({
         title: "Exercise Logged",
-        description: `Added ${newExercise.name}`,
+        description: "Exercise added successfully",
       });
-    }, 1500);
+    },
+  });
+
+  const updateExerciseMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<Exercise> }) => 
+      api.updateExercise(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["session", "today"] });
+    },
+  });
+
+  const deleteExerciseMutation = useMutation({
+    mutationFn: (id: number) => api.deleteExercise(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["session", "today"] });
+    },
+  });
+
+  useEffect(() => {
+    if (todaySession) {
+      setCurrentSessionId(todaySession.id);
+    } else if (!currentSessionId) {
+      // Create session on mount if none exists
+      createSessionMutation.mutate();
+    }
+  }, [todaySession]);
+
+  const handleVoiceInput = async (text: string) => {
+    if (!currentSessionId) return;
+    
+    setIsProcessing(true);
+    
+    try {
+      // Parse the voice input
+      const parsed = await api.parseWorkout(text);
+      
+      // Create exercise from parsed data
+      await createExerciseMutation.mutateAsync({
+        sessionId: currentSessionId,
+        exerciseName: parsed.exercise,
+        reps: parsed.reps,
+        sets: parsed.sets,
+        weight: parsed.weight,
+        weightUnit: parsed.unit,
+        rawVoiceInput: text,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to parse workout. Try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
-  const handleUpdateExercise = (id: string, data: any) => {
-    setExercises(prev => prev.map(ex => ex.id === id ? { ...ex, ...data } : ex));
+  const handleUpdateExercise = (id: number, data: any) => {
+    updateExerciseMutation.mutate({ id, data });
   };
 
-  const handleDeleteExercise = (id: string) => {
-    setExercises(prev => prev.filter(ex => ex.id !== id));
+  const handleDeleteExercise = (id: number) => {
+    deleteExerciseMutation.mutate(id);
   };
 
-  const handleFinishWorkout = () => {
+  const handleFinishWorkout = async () => {
+    if (!currentSessionId) return;
+    
+    // Update session end time
+    await api.updateSession(currentSessionId, { endTime: new Date().toISOString() });
+    
+    queryClient.invalidateQueries({ queryKey: ["sessions"] });
+    queryClient.invalidateQueries({ queryKey: ["analytics"] });
+    
     toast({
       title: "Workout Saved",
       description: "Great job! Your session has been recorded.",
     });
     setLocation("/");
   };
+
+  const exercises = todaySession?.exercises || [];
 
   return (
     <div className="min-h-screen bg-background flex flex-col pb-safe">
@@ -90,9 +157,22 @@ export default function WorkoutSession() {
             {exercises.map((ex) => (
               <ExerciseCard 
                 key={ex.id} 
-                exercise={ex} 
-                onUpdate={handleUpdateExercise}
-                onDelete={handleDeleteExercise}
+                exercise={{
+                  id: ex.id.toString(),
+                  name: ex.exerciseName,
+                  sets: ex.sets,
+                  reps: ex.reps,
+                  weight: ex.weight || 0,
+                  unit: ex.weightUnit || "lbs"
+                }} 
+                onUpdate={(id, data) => handleUpdateExercise(parseInt(id), {
+                  exerciseName: data.name,
+                  sets: data.sets,
+                  reps: data.reps,
+                  weight: data.weight,
+                  weightUnit: data.unit
+                })}
+                onDelete={(id) => handleDeleteExercise(parseInt(id))}
               />
             ))}
           </div>

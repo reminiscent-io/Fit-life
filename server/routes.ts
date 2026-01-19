@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import multer from "multer";
@@ -8,17 +8,39 @@ import { insertWeightLogSchema, insertWorkoutSessionSchema, insertExerciseSchema
 
 const upload = multer({ storage: multer.memoryStorage() });
 
+// Simple middleware to get or create default user
+async function ensureUser(req: Request, res: any, next: any) {
+  // For this fitness app, we'll use a simple single-user approach
+  // Get or create default user
+  let user = await storage.getUserByUsername("default");
+  
+  if (!user) {
+    user = await storage.createUser({
+      username: "default",
+      password: "password",
+      name: "Alex",
+      age: 28,
+      heightCm: 180,
+      sex: "male",
+      activityLevel: "moderately_active",
+      weeklyGoal: -0.5 // lose 0.5 lbs per week
+    });
+  }
+  
+  (req as any).user = user;
+  next();
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
   
+  // Apply user middleware to all API routes
+  app.use("/api", ensureUser);
+  
   // Profile endpoints
-  app.get("/api/profile", async (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ error: "Not authenticated" });
-    }
-    
+  app.get("/api/profile", async (req: any, res) => {
     const user = await storage.getUser(req.user.id);
     if (!user) {
       return res.status(404).json({ error: "User not found" });
@@ -29,11 +51,7 @@ export async function registerRoutes(
     res.json(userWithoutPassword);
   });
 
-  app.patch("/api/profile", async (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ error: "Not authenticated" });
-    }
-    
+  app.patch("/api/profile", async (req: any, res) => {
     const { name, age, heightCm, sex, activityLevel, targetWeight, weeklyGoal } = req.body;
     
     const user = await storage.updateUser(req.user.id, {
@@ -55,11 +73,7 @@ export async function registerRoutes(
   });
 
   // Weight logging endpoints
-  app.post("/api/weight", async (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ error: "Not authenticated" });
-    }
-    
+  app.post("/api/weight", async (req: any, res) => {
     try {
       const data = insertWeightLogSchema.parse({
         ...req.body,
@@ -73,22 +87,14 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/weight", async (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ error: "Not authenticated" });
-    }
-    
+  app.get("/api/weight", async (req: any, res) => {
     const days = req.query.days ? parseInt(req.query.days as string) : undefined;
     const logs = await storage.getWeightLogs(req.user.id, days);
     res.json(logs);
   });
 
   // Workout session endpoints
-  app.post("/api/sessions", async (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ error: "Not authenticated" });
-    }
-    
+  app.post("/api/sessions", async (req: any, res) => {
     try {
       const data = insertWorkoutSessionSchema.parse({
         ...req.body,
@@ -104,11 +110,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/sessions/today", async (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ error: "Not authenticated" });
-    }
-    
+  app.get("/api/sessions/today", async (req: any, res) => {
     const session = await storage.getTodaySession(req.user.id);
     if (!session) {
       return res.status(404).json({ error: "No session found for today" });
@@ -118,11 +120,7 @@ export async function registerRoutes(
     res.json({ ...session, exercises });
   });
 
-  app.get("/api/sessions", async (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ error: "Not authenticated" });
-    }
-    
+  app.get("/api/sessions", async (req: any, res) => {
     const fromDate = req.query.from as string | undefined;
     const toDate = req.query.to as string | undefined;
     
@@ -139,11 +137,7 @@ export async function registerRoutes(
     res.json(sessionsWithExercises);
   });
 
-  app.patch("/api/sessions/:id", async (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ error: "Not authenticated" });
-    }
-    
+  app.patch("/api/sessions/:id", async (req: any, res) => {
     const id = parseInt(req.params.id);
     const { name, location, endTime } = req.body;
     
@@ -161,11 +155,7 @@ export async function registerRoutes(
   });
 
   // Exercise endpoints
-  app.post("/api/exercises", async (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ error: "Not authenticated" });
-    }
-    
+  app.post("/api/exercises", async (req: any, res) => {
     try {
       const data = insertExerciseSchema.parse(req.body);
       const exercise = await storage.createExercise(data);
@@ -175,11 +165,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/exercises/:id", async (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ error: "Not authenticated" });
-    }
-    
+  app.patch("/api/exercises/:id", async (req: any, res) => {
     const id = parseInt(req.params.id);
     const exercise = await storage.updateExercise(id, {
       ...req.body,
@@ -193,31 +179,19 @@ export async function registerRoutes(
     res.json(exercise);
   });
 
-  app.delete("/api/exercises/:id", async (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ error: "Not authenticated" });
-    }
-    
+  app.delete("/api/exercises/:id", async (req: any, res) => {
     const id = parseInt(req.params.id);
     await storage.deleteExercise(id);
     res.json({ success: true });
   });
 
-  app.get("/api/exercises/names", async (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ error: "Not authenticated" });
-    }
-    
+  app.get("/api/exercises/names", async (req: any, res) => {
     const names = await storage.getExerciseNames();
     res.json(names);
   });
 
   // AI Voice endpoints
-  app.post("/api/voice/transcribe", upload.single('audio'), async (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ error: "Not authenticated" });
-    }
-    
+  app.post("/api/voice/transcribe", upload.single('audio'), async (req: any, res) => {
     if (!req.file) {
       return res.status(400).json({ error: "No audio file provided" });
     }
@@ -231,11 +205,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/voice/parse", async (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ error: "Not authenticated" });
-    }
-    
+  app.post("/api/voice/parse", async (req: any, res) => {
     const { text } = req.body;
     
     if (!text) {
@@ -251,11 +221,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/voice/clarify", async (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ error: "Not authenticated" });
-    }
-    
+  app.post("/api/voice/clarify", async (req: any, res) => {
     const { rawInput, missingFields } = req.body;
     
     if (!rawInput || !missingFields) {
@@ -272,11 +238,7 @@ export async function registerRoutes(
   });
 
   // Analytics endpoint
-  app.get("/api/analytics/summary", async (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ error: "Not authenticated" });
-    }
-    
+  app.get("/api/analytics/summary", async (req: any, res) => {
     const user = await storage.getUser(req.user.id);
     if (!user) {
       return res.status(404).json({ error: "User not found" });

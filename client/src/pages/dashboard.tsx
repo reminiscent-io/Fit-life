@@ -5,23 +5,54 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Play, Calendar, ChevronRight } from "lucide-react";
 import { Link } from "wouter";
-import { weightData, workoutHistory } from "@/lib/mockData";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/api";
+import { format } from "date-fns";
 
 export default function Dashboard() {
-  const lastWorkout = workoutHistory[0];
+  const { data: profile } = useQuery({
+    queryKey: ["profile"],
+    queryFn: () => api.getProfile(),
+  });
+
+  const { data: analytics } = useQuery({
+    queryKey: ["analytics"],
+    queryFn: () => api.getAnalyticsSummary(),
+  });
+
+  const { data: weightLogs } = useQuery({
+    queryKey: ["weight", 7],
+    queryFn: () => api.getWeightLogs(7),
+  });
+
+  const { data: sessions } = useQuery({
+    queryKey: ["sessions"],
+    queryFn: () => api.getSessions(),
+  });
+
+  const lastWorkout = sessions?.[0];
+
+  // Transform weight logs for chart
+  const chartData = weightLogs?.map(log => ({
+    date: format(new Date(log.date), "MMM d"),
+    weight: log.weight
+  })).reverse() || [];
 
   return (
     <Layout>
       <header className="mb-8 pt-4">
         <h1 className="text-3xl font-heading font-extrabold text-foreground mb-1">
-          Good Morning, <span className="text-primary">Alex</span>
+          Good Morning, <span className="text-primary">{profile?.name || "Alex"}</span>
         </h1>
         <p className="text-muted-foreground">Ready to crush your goals today?</p>
       </header>
 
       <section className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-8">
-        <CalorieDisplay current={1850} target={2800} />
-        <WeightChart data={weightData} />
+        <CalorieDisplay 
+          current={analytics?.calories.base || 0} 
+          target={analytics?.calories.target || 2800} 
+        />
+        <WeightChart data={chartData} />
         
         <Link href="/workout">
           <Card className="bg-primary text-primary-foreground border-none shadow-lg shadow-primary/25 cursor-pointer hover:scale-[1.02] transition-transform duration-300 relative overflow-hidden group">
@@ -54,18 +85,24 @@ export default function Dashboard() {
         </div>
 
         <div className="space-y-4">
-          <Card className="border-none shadow-sm hover:bg-accent/5 transition-colors cursor-pointer">
-            <CardContent className="p-4 flex items-center gap-4">
-              <div className="h-12 w-12 rounded-xl bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center">
-                <Calendar className="h-6 w-6" />
-              </div>
-              <div className="flex-1">
-                <h4 className="font-bold font-heading">{lastWorkout.name}</h4>
-                <p className="text-sm text-muted-foreground">Yesterday • {lastWorkout.duration} • {lastWorkout.calories} cal</p>
-              </div>
-              <ChevronRight className="h-5 w-5 text-muted-foreground" />
-            </CardContent>
-          </Card>
+          {lastWorkout ? (
+            <Card className="border-none shadow-sm hover:bg-accent/5 transition-colors cursor-pointer">
+              <CardContent className="p-4 flex items-center gap-4">
+                <div className="h-12 w-12 rounded-xl bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+                  <Calendar className="h-6 w-6" />
+                </div>
+                <div className="flex-1">
+                  <h4 className="font-bold font-heading">{lastWorkout.name || "Workout Session"}</h4>
+                  <p className="text-sm text-muted-foreground">
+                    {format(new Date(lastWorkout.date), "MMM d")} • {lastWorkout.exercises?.length || 0} exercises
+                  </p>
+                </div>
+                <ChevronRight className="h-5 w-5 text-muted-foreground" />
+              </CardContent>
+            </Card>
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-8">No recent workouts</p>
+          )}
         </div>
       </section>
     </Layout>
