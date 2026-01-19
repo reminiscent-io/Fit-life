@@ -1,0 +1,400 @@
+Perfect - let me create a comprehensive Replit prompt for this. I’ll use OpenAI’s API (including Whisper for voice transcription and GPT-4 for parsing) to keep it all in one ecosystem.
+
+REPLIT PROMPT: Fitness Tracker Web App
+Overview
+Build a sleek, mobile-first fitness tracking web app with voice input, weight tracking, and calorie estimation. Modern, minimal UI with smooth animations.
+Tech Stack
+	∙	Frontend: React + Vite
+	∙	Styling: Tailwind CSS
+	∙	Charts: Recharts
+	∙	Backend: Express.js
+	∙	Database: SQLite with better-sqlite3
+	∙	AI: OpenAI API (Whisper for voice, GPT-4 for parsing)
+	∙	Voice: Web Speech API (browser native)
+Core Features
+1. Voice Workout Logging
+	∙	Large microphone button on home screen
+	∙	Record voice input: “I did 6 dumbbell curls at 45 pounds”
+	∙	Use OpenAI Whisper API to transcribe speech
+	∙	Use GPT-4 to parse into structured data:
+
+{
+  "exercise": "dumbbell curls",
+  "reps": 6,
+  "weight": 45,
+  "unit": "lbs",
+  "confidence": "high"
+}
+
+
+	∙	If missing data, ask conversational follow-up questions
+	∙	Show confirmation screen with inline editable fields
+	∙	All fields editable (exercise name, reps, weight)
+	∙	Save to current workout session
+
+Today - Monday, Jan 19
+Equinox • 52 minutes
+
+Upper Body
+• Dumbbell curls: 3×12 @ 45 lbs
+• Bench press: 4×8 @ 185 lbs
+
+Total volume: 8,940 lbs
+
+
+4. Weight Tracking
+	∙	Simple daily weight entry
+	∙	Morning weight prompt
+	∙	7-day moving average calculation
+	∙	Trend chart (30 days)
+	∙	Weekly change indicator
+5. Calorie Estimation
+User Profile (onboarding):
+	∙	Age, height, sex
+	∙	Current weight
+	∙	Activity level (sedentary to very active)
+	∙	Goal (maintain/lose/gain, target lbs/week)
+Calculations:
+	∙	BMR using Mifflin-St Jeor equation
+	∙	TDEE = BMR × activity multiplier
+	∙	Add workout calorie burn (estimate from volume + duration)
+	∙	Show daily calorie target
+Dashboard display:
+
+Weight: 192.4 lbs (↓0.3 from yesterday)
+7-day avg: 193.1 lbs
+
+Today's Calories:
+Base: 2,450
++ Workout: 380
+Target: 2,830 cal
+
+
+Database Schema
+
+-- Users
+CREATE TABLE users (
+  id TEXT PRIMARY KEY,
+  age INTEGER,
+  height_cm REAL,
+  sex TEXT,
+  activity_level TEXT,
+  target_weight REAL,
+  weekly_goal REAL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Weight logs
+CREATE TABLE weight_logs (
+  id TEXT PRIMARY KEY,
+  user_id TEXT,
+  date DATE,
+  weight REAL,
+  time_of_day TEXT,
+  notes TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+-- Workout sessions
+CREATE TABLE workout_sessions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT,
+  date DATE,
+  location TEXT,
+  start_time DATETIME,
+  end_time DATETIME,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+-- Exercises
+CREATE TABLE exercises (
+  id TEXT PRIMARY KEY,
+  session_id TEXT,
+  exercise_name TEXT,
+  reps INTEGER,
+  sets INTEGER DEFAULT 1,
+  weight REAL,
+  weight_unit TEXT DEFAULT 'lbs',
+  raw_voice_input TEXT,
+  manually_edited BOOLEAN DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (session_id) REFERENCES workout_sessions(id)
+);
+
+-- Exercise name history (for autocomplete)
+CREATE TABLE exercise_names (
+  name TEXT PRIMARY KEY,
+  usage_count INTEGER DEFAULT 1,
+  last_used DATETIME
+);
+
+
+API Endpoints
+
+// Auth (simple - single user for V1)
+POST /api/profile - Create/update user profile
+GET /api/profile - Get user profile
+
+// Weight
+POST /api/weight - Log weight entry
+GET /api/weight?days=30 - Get weight history
+
+// Workouts
+POST /api/sessions - Create new session
+GET /api/sessions/today - Get today's session
+GET /api/sessions?from=DATE&to=DATE - Get session history
+PATCH /api/sessions/:id - Update session (location, times)
+
+// Exercises
+POST /api/exercises - Add exercise to session
+PATCH /api/exercises/:id - Edit exercise
+DELETE /api/exercises/:id - Delete exercise
+GET /api/exercises/names - Get autocomplete list
+
+// AI
+POST /api/voice/transcribe - Whisper transcription
+POST /api/voice/parse - GPT-4 parsing of workout description
+POST /api/voice/clarify - GPT-4 conversational follow-up
+
+// Analytics
+GET /api/analytics/summary?date=DATE - Daily summary with calories
+GET /api/analytics/trends?days=30 - Weight trends, volume trends
+
+
+OpenAI Integration
+
+// Transcribe voice with Whisper
+const transcription = await openai.audio.transcriptions.create({
+  file: audioFile,
+  model: "whisper-1"
+});
+
+// Parse workout with GPT-4
+const completion = await openai.chat.completions.create({
+  model: "gpt-4",
+  messages: [
+    {
+      role: "system",
+      content: `You are a fitness tracking assistant. Parse workout descriptions into structured JSON.
+      
+      Extract: exercise name, reps, sets (if mentioned), weight, unit.
+      
+      Return format:
+      {
+        "exercise": "dumbbell curls",
+        "reps": 12,
+        "sets": 3,
+        "weight": 45,
+        "unit": "lbs",
+        "confidence": "high|medium|low",
+        "missing": ["field1", "field2"] // if data is incomplete
+      }
+      
+      If critical data is missing, set confidence to "low" and list missing fields.`
+    },
+    {
+      role: "user",
+      content: transcribedText
+    }
+  ],
+  response_format: { type: "json_object" }
+});
+
+// Conversational clarification
+const clarification = await openai.chat.completions.create({
+  model: "gpt-4",
+  messages: [
+    {
+      role: "system",
+      content: "You are a friendly fitness tracker. Ask ONE clarifying question to complete the workout log. Be conversational and brief."
+    },
+    {
+      role: "user",
+      content: `I logged: "${rawInput}". Missing: ${missingFields.join(', ')}. What should I ask?`
+    }
+  ]
+});
+
+
+UI/UX Requirements
+Design principles:
+	∙	Mobile-first (iPhone Safari optimized)
+	∙	Large touch targets (min 44px)
+	∙	Smooth animations (framer-motion optional)
+	∙	Clean, minimal aesthetic
+	∙	Fast - no unnecessary loading states
+Color scheme:
+	∙	Primary: Blue/indigo for actions
+	∙	Success: Green for completed workouts
+	∙	Neutral: Grays for text/backgrounds
+	∙	Accent: Orange/yellow for calorie tracking
+Key screens:
+	1.	Home/Dashboard
+	∙	Quick stats (today’s weight, calorie target)
+	∙	Large “Start Workout” button
+	∙	Today’s workout summary (if exists)
+	∙	Mini charts (weight trend)
+	2.	Workout Logging
+	∙	Fullscreen mic button with pulse animation
+	∙	Transcription shown in real-time
+	∙	Confirmation card with edit fields
+	∙	“Add another” / “Finish workout”
+	3.	History
+	∙	Calendar view or infinite scroll list
+	∙	Tap to expand session details
+	∙	Inline edit any exercise
+	4.	Analytics
+	∙	Weight chart (30/90 days toggle)
+	∙	Volume by muscle group (pie/bar chart)
+	∙	Personal records
+	∙	Calorie trends
+	5.	Profile/Settings
+	∙	Edit personal info
+	∙	Adjust goals
+	∙	Default location
+	∙	Export data (future)
+Voice UX Flow
+
+User: [Taps mic] "I did 6 dumbbell curls"
+App: [Transcribing...]
+App: [Shows card]
+     "Dumbbell curls
+      6 reps
+      Weight?"
+     
+User: "45 pounds"
+App: [Updates card]
+     ✓ Dumbbell curls
+     ✓ 6 reps  
+     ✓ 45 lbs
+     [Save] [Add Another]
+
+
+Calorie Calculation Logic
+
+// Mifflin-St Jeor BMR
+function calculateBMR(weight_kg, height_cm, age, sex) {
+  if (sex === 'male') {
+    return 10 * weight_kg + 6.25 * height_cm - 5 * age + 5;
+  } else {
+    return 10 * weight_kg + 6.25 * height_cm - 5 * age - 161;
+  }
+}
+
+// TDEE multipliers
+const activityMultipliers = {
+  sedentary: 1.2,
+  lightly_active: 1.375,
+  moderately_active: 1.55,
+  very_active: 1.725,
+  extremely_active: 1.9
+};
+
+// Workout calorie estimation (rough)
+function estimateWorkoutCalories(exercises, duration_minutes, user_weight_lbs) {
+  // METs-based estimation
+  // Strength training: ~3.5-6 METs depending on intensity
+  const avgMETs = 5;
+  const weight_kg = user_weight_lbs * 0.453592;
+  return avgMETs * weight_kg * (duration_minutes / 60);
+}
+
+// Daily target with goal adjustment
+function getDailyTarget(tdee, weeklyGoalLbs) {
+  const dailyCalorieAdjustment = (weeklyGoalLbs * 3500) / 7;
+  return tdee - dailyCalorieAdjustment; // negative for loss, positive for gain
+}
+
+
+Environment Variables
+
+OPENAI_API_KEY=sk-...
+PORT=3000
+DATABASE_PATH=./fitness.db
+
+
+File Structure
+
+/
+├── src/
+│   ├── components/
+│   │   ├── MicButton.jsx
+│   │   ├── ExerciseCard.jsx
+│   │   ├── WorkoutSummary.jsx
+│   │   ├── WeightChart.jsx
+│   │   ├── CalorieDisplay.jsx
+│   │   └── ProfileForm.jsx
+│   ├── pages/
+│   │   ├── Dashboard.jsx
+│   │   ├── Workout.jsx
+│   │   ├── History.jsx
+│   │   ├── Analytics.jsx
+│   │   └── Profile.jsx
+│   ├── hooks/
+│   │   ├── useVoiceRecording.js
+│   │   ├── useWorkoutSession.js
+│   │   └── useWeightTracking.js
+│   ├── utils/
+│   │   ├── calculations.js
+│   │   └── formatting.js
+│   ├── App.jsx
+│   └── main.jsx
+├── server/
+│   ├── index.js
+│   ├── db.js
+│   ├── routes/
+│   │   ├── profile.js
+│   │   ├── weight.js
+│   │   ├── workouts.js
+│   │   ├── exercises.js
+│   │   ├── voice.js
+│   │   └── analytics.js
+│   └── openai.js
+├── package.json
+└── vite.config.js
+
+
+Dependencies
+
+{
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.20.0",
+    "express": "^4.18.2",
+    "better-sqlite3": "^9.2.2",
+    "openai": "^4.24.0",
+    "uuid": "^9.0.1",
+    "date-fns": "^3.0.0",
+    "recharts": "^2.10.3",
+    "multer": "^1.4.5-lts.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.2.1",
+    "vite": "^5.0.8",
+    "tailwindcss": "^3.4.0",
+    "autoprefixer": "^10.4.16",
+    "postcss": "^8.4.32"
+  }
+}
+
+
+Success Criteria
+	∙	Voice recording works smoothly on iPhone Safari
+	∙	Exercise parsing is 80%+ accurate
+	∙	All data is editable after AI parsing
+	∙	Weight/calorie calculations are mathematically correct
+	∙	App loads in <2 seconds
+	∙	Smooth, native-feeling animations
+	∙	Works offline after initial load (service worker optional for V1)
+Future Enhancements (not V1)
+	∙	Friends/social features
+	∙	Workout templates
+	∙	Progressive web app install
+	∙	Exercise form videos
+	∙	Photo progress tracking
+	∙	Apple Health export/import
+
+Build this as a single Replit project. Focus on polish and speed. Make it feel like a premium fitness app, not a prototype.
