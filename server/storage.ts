@@ -50,6 +50,27 @@ export interface IStorage {
   getExerciseHistory(userId: number, exerciseName: string): Promise<{ date: string; reps: number; weight: number | null; sets: number }[]>;
   getUniqueExerciseNames(userId: number): Promise<string[]>;
   getCardioSummary(userId: number, activityType?: string): Promise<{ activityType: string; totalMinutes: number; totalSessions: number }[]>;
+
+  // Comprehensive data for AI analytics
+  getComprehensiveUserData(userId: number): Promise<{
+    workouts: Array<{
+      date: string;
+      name: string | null;
+      exercises: Array<{
+        exerciseName: string;
+        sets: number;
+        reps: number;
+        weight: number | null;
+        weightUnit: string | null;
+      }>;
+      cardio: Array<{
+        activityType: string;
+        durationMinutes: number;
+        distanceKm: number | null;
+        caloriesBurned: number | null;
+      }>;
+    }>;
+  }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -281,6 +302,66 @@ export class DatabaseStorage implements IStorage {
     }
 
     return query;
+  }
+
+  // Comprehensive data for AI analytics
+  async getComprehensiveUserData(userId: number): Promise<{
+    workouts: Array<{
+      date: string;
+      name: string | null;
+      exercises: Array<{
+        exerciseName: string;
+        sets: number;
+        reps: number;
+        weight: number | null;
+        weightUnit: string | null;
+      }>;
+      cardio: Array<{
+        activityType: string;
+        durationMinutes: number;
+        distanceKm: number | null;
+        caloriesBurned: number | null;
+      }>;
+    }>;
+  }> {
+    // Get all workout sessions for the user
+    const sessions = await db.select()
+      .from(workoutSessions)
+      .where(eq(workoutSessions.userId, userId))
+      .orderBy(desc(workoutSessions.date));
+
+    // For each session, get exercises and cardio
+    const workouts = await Promise.all(
+      sessions.map(async (session) => {
+        const sessionExercises = await db.select({
+          exerciseName: exercises.exerciseName,
+          sets: exercises.sets,
+          reps: exercises.reps,
+          weight: exercises.weight,
+          weightUnit: exercises.weightUnit,
+        })
+          .from(exercises)
+          .where(eq(exercises.sessionId, session.id));
+
+        const sessionCardio = await db.select({
+          activityType: cardioSessions.activityType,
+          durationMinutes: cardioSessions.durationMinutes,
+          distanceKm: cardioSessions.distanceKm,
+          caloriesBurned: cardioSessions.caloriesBurned,
+        })
+          .from(cardioSessions)
+          .where(eq(cardioSessions.sessionId, session.id));
+
+        return {
+          date: session.date,
+          name: session.name,
+          exercises: sessionExercises,
+          cardio: sessionCardio,
+        };
+      })
+    );
+
+    return { workouts };
   }
 }
 

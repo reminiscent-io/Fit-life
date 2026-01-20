@@ -80,6 +80,21 @@ export interface CardioSummary {
   totalSessions: number;
 }
 
+export interface AiInsight {
+  answer: string;
+  recommendations?: string[];
+  suggestedWorkout?: {
+    name: string;
+    exercises: Array<{
+      exerciseName: string;
+      sets: number;
+      reps: number;
+      weight?: number;
+      notes?: string;
+    }>;
+  };
+}
+
 class API {
   private baseURL = "/api";
 
@@ -326,6 +341,18 @@ class API {
     });
 
     if (!res.ok) throw new Error("Failed to delete cardio session");
+  }
+
+  // AI Fitness Coach
+  async askAiCoach(question: string): Promise<AiInsight> {
+    const res = await fetch(`${this.baseURL}/analytics/ask`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question }),
+    });
+
+    if (!res.ok) throw new Error("Failed to get AI insights");
+    return res.json();
   }
 }
 
