@@ -207,6 +207,14 @@ class API {
     return res.json();
   }
 
+  async deleteSession(id: number): Promise<void> {
+    const res = await fetch(`${this.baseURL}/sessions/${id}`, {
+      method: "DELETE",
+    });
+
+    if (!res.ok) throw new Error("Failed to delete session");
+  }
+
   // Weight endpoints
   async createWeightLog(data: {
     date: string;

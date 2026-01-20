@@ -27,7 +27,8 @@ export interface IStorage {
   getTodaySession(userId: number): Promise<WorkoutSession | undefined>;
   getWorkoutSessions(userId: number, fromDate?: string, toDate?: string): Promise<WorkoutSession[]>;
   updateWorkoutSession(id: number, data: Partial<WorkoutSession>): Promise<WorkoutSession | undefined>;
-  
+  deleteWorkoutSession(id: number): Promise<void>;
+
   // Exercises
   createExercise(exercise: InsertExercise): Promise<Exercise>;
   getExercisesBySession(sessionId: number): Promise<Exercise[]>;
@@ -161,6 +162,13 @@ export class DatabaseStorage implements IStorage {
   async updateWorkoutSession(id: number, data: Partial<WorkoutSession>): Promise<WorkoutSession | undefined> {
     const [session] = await db.update(workoutSessions).set(data).where(eq(workoutSessions.id, id)).returning();
     return session;
+  }
+
+  async deleteWorkoutSession(id: number): Promise<void> {
+    // Delete associated exercises and cardio sessions first
+    await db.delete(exercises).where(eq(exercises.sessionId, id));
+    await db.delete(cardioSessions).where(eq(cardioSessions.sessionId, id));
+    await db.delete(workoutSessions).where(eq(workoutSessions.id, id));
   }
 
   // Exercises
