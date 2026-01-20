@@ -56,6 +56,30 @@ export interface AnalyticsSummary {
   };
 }
 
+export interface CardioSession {
+  id: number;
+  sessionId: number;
+  activityType: string;
+  durationMinutes: number;
+  distanceKm: number | null;
+  caloriesBurned: number | null;
+  notes: string | null;
+  createdAt: string;
+}
+
+export interface ExerciseHistoryPoint {
+  date: string;
+  reps: number;
+  weight: number | null;
+  sets: number;
+}
+
+export interface CardioSummary {
+  activityType: string;
+  totalMinutes: number;
+  totalSessions: number;
+}
+
 class API {
   private baseURL = "/api";
 
@@ -223,6 +247,85 @@ class API {
     const res = await fetch(`${this.baseURL}/exercises/names`);
     if (!res.ok) throw new Error("Failed to get exercise names");
     return res.json();
+  }
+
+  // Analytics - workout count
+  async getWorkoutCount(): Promise<{ count: number }> {
+    const res = await fetch(`${this.baseURL}/analytics/workout-count`);
+    if (!res.ok) throw new Error("Failed to get workout count");
+    return res.json();
+  }
+
+  // Analytics - exercise history for scatter chart
+  async getExerciseHistory(exerciseName: string): Promise<ExerciseHistoryPoint[]> {
+    const res = await fetch(`${this.baseURL}/analytics/exercise-history/${encodeURIComponent(exerciseName)}`);
+    if (!res.ok) throw new Error("Failed to get exercise history");
+    return res.json();
+  }
+
+  // Analytics - unique exercise names for dropdown
+  async getUniqueExerciseNames(): Promise<string[]> {
+    const res = await fetch(`${this.baseURL}/analytics/exercise-names`);
+    if (!res.ok) throw new Error("Failed to get exercise names");
+    return res.json();
+  }
+
+  // Analytics - cardio summary
+  async getCardioSummary(activityType?: string): Promise<CardioSummary[]> {
+    const params = activityType ? `?type=${encodeURIComponent(activityType)}` : "";
+    const res = await fetch(`${this.baseURL}/analytics/cardio-summary${params}`);
+    if (!res.ok) throw new Error("Failed to get cardio summary");
+    return res.json();
+  }
+
+  // Cardio session endpoints
+  async createCardioSession(data: {
+    sessionId: number;
+    activityType: string;
+    durationMinutes: number;
+    distanceKm?: number;
+    caloriesBurned?: number;
+    notes?: string;
+  }): Promise<CardioSession> {
+    const res = await fetch(`${this.baseURL}/cardio`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+
+    if (!res.ok) throw new Error("Failed to create cardio session");
+    return res.json();
+  }
+
+  async getCardioSessions(): Promise<CardioSession[]> {
+    const res = await fetch(`${this.baseURL}/cardio`);
+    if (!res.ok) throw new Error("Failed to get cardio sessions");
+    return res.json();
+  }
+
+  async getCardioBySession(sessionId: number): Promise<CardioSession[]> {
+    const res = await fetch(`${this.baseURL}/cardio/session/${sessionId}`);
+    if (!res.ok) throw new Error("Failed to get cardio for session");
+    return res.json();
+  }
+
+  async updateCardioSession(id: number, data: Partial<CardioSession>): Promise<CardioSession> {
+    const res = await fetch(`${this.baseURL}/cardio/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+
+    if (!res.ok) throw new Error("Failed to update cardio session");
+    return res.json();
+  }
+
+  async deleteCardioSession(id: number): Promise<void> {
+    const res = await fetch(`${this.baseURL}/cardio/${id}`, {
+      method: "DELETE",
+    });
+
+    if (!res.ok) throw new Error("Failed to delete cardio session");
   }
 }
 

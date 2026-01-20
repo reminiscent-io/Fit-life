@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import multer from "multer";
 import { transcribeAudio, parseWorkoutText, generateClarificationQuestion } from "./lib/openai";
 import { calculateBMR, activityMultipliers, estimateWorkoutCalories, getDailyCalorieTarget, lbsToKg, calculateMovingAverage } from "./lib/calculations";
-import { insertWeightLogSchema, insertWorkoutSessionSchema, insertExerciseSchema } from "@shared/schema";
+import { insertWeightLogSchema, insertWorkoutSessionSchema, insertExerciseSchema, insertCardioSessionSchema } from "@shared/schema";
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -243,12 +243,12 @@ export async function registerRoutes(
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
-    
+
     // Get weight data
     const weightLogs = await storage.getWeightLogs(req.user.id, 30);
     const currentWeight = weightLogs[0]?.weight || user.targetWeight || 0;
     const movingAvg = calculateMovingAverage(weightLogs.map(w => w.weight));
-    
+
     // Calculate TDEE
     let baseCalories = 2000; // Default
     if (user.age && user.heightCm && currentWeight) {
@@ -256,20 +256,20 @@ export async function registerRoutes(
       const multiplier = activityMultipliers[user.activityLevel || 'moderately_active'];
       baseCalories = Math.round(bmr * multiplier);
     }
-    
+
     // Get today's workout
     const todaySession = await storage.getTodaySession(req.user.id);
     let workoutCalories = 0;
-    
+
     if (todaySession && todaySession.startTime && todaySession.endTime) {
       const duration = (new Date(todaySession.endTime).getTime() - new Date(todaySession.startTime).getTime()) / 1000 / 60;
       workoutCalories = Math.round(estimateWorkoutCalories(duration, currentWeight));
     }
-    
-    const targetCalories = user.weeklyGoal 
+
+    const targetCalories = user.weeklyGoal
       ? Math.round(getDailyCalorieTarget(baseCalories, user.weeklyGoal))
       : baseCalories;
-    
+
     res.json({
       weight: {
         current: currentWeight,
@@ -282,6 +282,71 @@ export async function registerRoutes(
         target: targetCalories + workoutCalories
       }
     });
+  });
+
+  // Workout count endpoint
+  app.get("/api/analytics/workout-count", async (req: any, res) => {
+    const count = await storage.getWorkoutCount(req.user.id);
+    res.json({ count });
+  });
+
+  // Exercise history endpoint (for scatter chart)
+  app.get("/api/analytics/exercise-history/:exerciseName", async (req: any, res) => {
+    const exerciseName = decodeURIComponent(req.params.exerciseName);
+    const history = await storage.getExerciseHistory(req.user.id, exerciseName);
+    res.json(history);
+  });
+
+  // Get unique exercise names for dropdown
+  app.get("/api/analytics/exercise-names", async (req: any, res) => {
+    const names = await storage.getUniqueExerciseNames(req.user.id);
+    res.json(names);
+  });
+
+  // Cardio summary endpoint
+  app.get("/api/analytics/cardio-summary", async (req: any, res) => {
+    const activityType = req.query.type as string | undefined;
+    const summary = await storage.getCardioSummary(req.user.id, activityType);
+    res.json(summary);
+  });
+
+  // Cardio session endpoints
+  app.post("/api/cardio", async (req: any, res) => {
+    try {
+      const data = insertCardioSessionSchema.parse(req.body);
+      const cardio = await storage.createCardioSession(data);
+      res.json(cardio);
+    } catch (error) {
+      res.status(400).json({ error: "Invalid data" });
+    }
+  });
+
+  app.get("/api/cardio", async (req: any, res) => {
+    const cardioSessions = await storage.getCardioByUser(req.user.id);
+    res.json(cardioSessions);
+  });
+
+  app.get("/api/cardio/session/:sessionId", async (req: any, res) => {
+    const sessionId = parseInt(req.params.sessionId);
+    const cardio = await storage.getCardioBySession(sessionId);
+    res.json(cardio);
+  });
+
+  app.patch("/api/cardio/:id", async (req: any, res) => {
+    const id = parseInt(req.params.id);
+    const cardio = await storage.updateCardioSession(id, req.body);
+
+    if (!cardio) {
+      return res.status(404).json({ error: "Cardio session not found" });
+    }
+
+    res.json(cardio);
+  });
+
+  app.delete("/api/cardio/:id", async (req: any, res) => {
+    const id = parseInt(req.params.id);
+    await storage.deleteCardioSession(id);
+    res.json({ success: true });
   });
 
   return httpServer;

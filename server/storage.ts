@@ -1,13 +1,14 @@
 import { db } from "./db";
-import { 
-  users, weightLogs, workoutSessions, exercises, exerciseNames,
+import {
+  users, weightLogs, workoutSessions, exercises, exerciseNames, cardioSessions,
   type User, type InsertUser,
   type WeightLog, type InsertWeightLog,
   type WorkoutSession, type InsertWorkoutSession,
   type Exercise, type InsertExercise,
-  type ExerciseName
+  type ExerciseName,
+  type CardioSession, type InsertCardioSession
 } from "@shared/schema";
-import { eq, desc, and, sql, gte } from "drizzle-orm";
+import { eq, desc, and, sql, gte, count } from "drizzle-orm";
 
 export interface IStorage {
   // Users
@@ -36,6 +37,19 @@ export interface IStorage {
   // Exercise Names (autocomplete)
   getExerciseNames(): Promise<ExerciseName[]>;
   upsertExerciseName(name: string): Promise<void>;
+
+  // Cardio Sessions
+  createCardioSession(cardio: InsertCardioSession): Promise<CardioSession>;
+  getCardioBySession(sessionId: number): Promise<CardioSession[]>;
+  getCardioByUser(userId: number): Promise<CardioSession[]>;
+  updateCardioSession(id: number, data: Partial<CardioSession>): Promise<CardioSession | undefined>;
+  deleteCardioSession(id: number): Promise<void>;
+
+  // Analytics
+  getWorkoutCount(userId: number): Promise<number>;
+  getExerciseHistory(userId: number, exerciseName: string): Promise<{ date: string; reps: number; weight: number | null; sets: number }[]>;
+  getUniqueExerciseNames(userId: number): Promise<string[]>;
+  getCardioSummary(userId: number, activityType?: string): Promise<{ activityType: string; totalMinutes: number; totalSessions: number }[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -106,17 +120,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getWorkoutSessions(userId: number, fromDate?: string, toDate?: string): Promise<WorkoutSession[]> {
-    let query = db.select().from(workoutSessions).where(eq(workoutSessions.userId, userId));
-    
     if (fromDate && toDate) {
-      query = query.where(and(
-        eq(workoutSessions.userId, userId),
-        gte(workoutSessions.date, fromDate),
-        sql`${workoutSessions.date} <= ${toDate}`
-      ));
+      return db.select()
+        .from(workoutSessions)
+        .where(and(
+          eq(workoutSessions.userId, userId),
+          gte(workoutSessions.date, fromDate),
+          sql`${workoutSessions.date} <= ${toDate}`
+        ))
+        .orderBy(desc(workoutSessions.date));
     }
-    
-    return query.orderBy(desc(workoutSessions.date));
+
+    return db.select()
+      .from(workoutSessions)
+      .where(eq(workoutSessions.userId, userId))
+      .orderBy(desc(workoutSessions.date));
   }
 
   async updateWorkoutSession(id: number, data: Partial<WorkoutSession>): Promise<WorkoutSession | undefined> {
@@ -164,6 +182,105 @@ export class DatabaseStorage implements IStorage {
           lastUsed: new Date()
         }
       });
+  }
+
+  // Cardio Sessions
+  async createCardioSession(cardio: InsertCardioSession): Promise<CardioSession> {
+    const [session] = await db.insert(cardioSessions).values(cardio).returning();
+    return session;
+  }
+
+  async getCardioBySession(sessionId: number): Promise<CardioSession[]> {
+    return db.select().from(cardioSessions).where(eq(cardioSessions.sessionId, sessionId));
+  }
+
+  async getCardioByUser(userId: number): Promise<CardioSession[]> {
+    return db.select({
+      id: cardioSessions.id,
+      sessionId: cardioSessions.sessionId,
+      activityType: cardioSessions.activityType,
+      durationMinutes: cardioSessions.durationMinutes,
+      distanceKm: cardioSessions.distanceKm,
+      caloriesBurned: cardioSessions.caloriesBurned,
+      notes: cardioSessions.notes,
+      createdAt: cardioSessions.createdAt,
+    })
+      .from(cardioSessions)
+      .innerJoin(workoutSessions, eq(cardioSessions.sessionId, workoutSessions.id))
+      .where(eq(workoutSessions.userId, userId))
+      .orderBy(desc(cardioSessions.createdAt));
+  }
+
+  async updateCardioSession(id: number, data: Partial<CardioSession>): Promise<CardioSession | undefined> {
+    const [session] = await db.update(cardioSessions).set(data).where(eq(cardioSessions.id, id)).returning();
+    return session;
+  }
+
+  async deleteCardioSession(id: number): Promise<void> {
+    await db.delete(cardioSessions).where(eq(cardioSessions.id, id));
+  }
+
+  // Analytics
+  async getWorkoutCount(userId: number): Promise<number> {
+    const result = await db.select({ count: count() })
+      .from(workoutSessions)
+      .where(eq(workoutSessions.userId, userId));
+    return result[0]?.count || 0;
+  }
+
+  async getExerciseHistory(userId: number, exerciseName: string): Promise<{ date: string; reps: number; weight: number | null; sets: number }[]> {
+    const results = await db.select({
+      date: workoutSessions.date,
+      reps: exercises.reps,
+      weight: exercises.weight,
+      sets: exercises.sets,
+    })
+      .from(exercises)
+      .innerJoin(workoutSessions, eq(exercises.sessionId, workoutSessions.id))
+      .where(and(
+        eq(workoutSessions.userId, userId),
+        eq(exercises.exerciseName, exerciseName)
+      ))
+      .orderBy(desc(workoutSessions.date));
+    return results;
+  }
+
+  async getUniqueExerciseNames(userId: number): Promise<string[]> {
+    const results = await db.selectDistinct({ name: exercises.exerciseName })
+      .from(exercises)
+      .innerJoin(workoutSessions, eq(exercises.sessionId, workoutSessions.id))
+      .where(eq(workoutSessions.userId, userId))
+      .orderBy(exercises.exerciseName);
+    return results.map(r => r.name);
+  }
+
+  async getCardioSummary(userId: number, activityType?: string): Promise<{ activityType: string; totalMinutes: number; totalSessions: number }[]> {
+    let query = db.select({
+      activityType: cardioSessions.activityType,
+      totalMinutes: sql<number>`sum(${cardioSessions.durationMinutes})`.as('totalMinutes'),
+      totalSessions: count().as('totalSessions'),
+    })
+      .from(cardioSessions)
+      .innerJoin(workoutSessions, eq(cardioSessions.sessionId, workoutSessions.id))
+      .where(eq(workoutSessions.userId, userId))
+      .groupBy(cardioSessions.activityType);
+
+    if (activityType) {
+      query = db.select({
+        activityType: cardioSessions.activityType,
+        totalMinutes: sql<number>`sum(${cardioSessions.durationMinutes})`.as('totalMinutes'),
+        totalSessions: count().as('totalSessions'),
+      })
+        .from(cardioSessions)
+        .innerJoin(workoutSessions, eq(cardioSessions.sessionId, workoutSessions.id))
+        .where(and(
+          eq(workoutSessions.userId, userId),
+          eq(cardioSessions.activityType, activityType)
+        ))
+        .groupBy(cardioSessions.activityType);
+    }
+
+    return query;
   }
 }
 
