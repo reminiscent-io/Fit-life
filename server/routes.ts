@@ -18,7 +18,7 @@ async function ensureUser(req: Request, res: any, next: any) {
     user = await storage.createUser({
       username: "default",
       password: "password",
-      name: "Alex",
+      name: "Kevin",
       age: 28,
       heightCm: 180,
       sex: "male",
@@ -140,18 +140,24 @@ export async function registerRoutes(
   app.patch("/api/sessions/:id", async (req: any, res) => {
     const id = parseInt(req.params.id);
     const { name, location, endTime } = req.body;
-    
+
     const session = await storage.updateWorkoutSession(id, {
       name,
       location,
       endTime
     });
-    
+
     if (!session) {
       return res.status(404).json({ error: "Session not found" });
     }
-    
+
     res.json(session);
+  });
+
+  app.delete("/api/sessions/:id", async (req: any, res) => {
+    const id = parseInt(req.params.id);
+    await storage.deleteWorkoutSession(id);
+    res.json({ success: true });
   });
 
   // Exercise endpoints
