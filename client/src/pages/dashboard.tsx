@@ -1,6 +1,7 @@
 import Layout from "@/components/layout";
-import WeightChart from "@/components/charts/weight-chart";
-import CalorieDisplay from "@/components/charts/calorie-display";
+import WorkoutCount from "@/components/charts/workout-count";
+import ExerciseScatterChart from "@/components/charts/exercise-scatter-chart";
+import CardioMetrics from "@/components/charts/cardio-metrics";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Play, Calendar, ChevronRight } from "lucide-react";
@@ -9,20 +10,22 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { format } from "date-fns";
 
+function getGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good Morning";
+  if (hour < 17) return "Good Afternoon";
+  return "Good Evening";
+}
+
+function getFirstName(fullName: string | undefined): string {
+  if (!fullName) return "there";
+  return fullName.split(" ")[0];
+}
+
 export default function Dashboard() {
   const { data: profile } = useQuery({
     queryKey: ["profile"],
     queryFn: () => api.getProfile(),
-  });
-
-  const { data: analytics } = useQuery({
-    queryKey: ["analytics"],
-    queryFn: () => api.getAnalyticsSummary(),
-  });
-
-  const { data: weightLogs } = useQuery({
-    queryKey: ["weight", 7],
-    queryFn: () => api.getWeightLogs(7),
   });
 
   const { data: sessions } = useQuery({
@@ -31,34 +34,25 @@ export default function Dashboard() {
   });
 
   const lastWorkout = sessions?.[0];
-
-  // Transform weight logs for chart
-  const chartData = weightLogs?.map(log => ({
-    date: format(new Date(log.date), "MMM d"),
-    weight: log.weight
-  })).reverse() || [];
+  const firstName = getFirstName(profile?.name);
 
   return (
     <Layout>
       <header className="mb-8 pt-4">
         <h1 className="text-3xl font-heading font-extrabold text-foreground mb-1">
-          Good Morning, <span className="text-primary">{profile?.name || "Alex"}</span>
+          {getGreeting()}, <span className="text-primary">{firstName}</span>
         </h1>
         <p className="text-muted-foreground">Ready to crush your goals today?</p>
       </header>
 
       <section className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-8">
-        <CalorieDisplay 
-          current={analytics?.calories.base || 0} 
-          target={analytics?.calories.target || 2800} 
-        />
-        <WeightChart data={chartData} />
-        
+        <WorkoutCount />
+
         <Link href="/workout">
-          <Card className="bg-primary text-primary-foreground border-none shadow-lg shadow-primary/25 cursor-pointer hover:scale-[1.02] transition-transform duration-300 relative overflow-hidden group">
+          <Card className="bg-primary text-primary-foreground border-none shadow-lg shadow-primary/25 cursor-pointer hover:scale-[1.02] transition-transform duration-300 relative overflow-hidden group h-full">
             <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent" />
             <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-2xl group-hover:bg-white/20 transition-colors" />
-            
+
             <CardContent className="p-6 h-full flex flex-col justify-between relative z-10">
               <div>
                 <h3 className="font-heading font-bold text-xl mb-1">Start Workout</h3>
@@ -72,37 +66,54 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </Link>
+
+        <ExerciseScatterChart />
       </section>
 
-      <section>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold font-heading">Recent Activity</h2>
-          <Link href="/history">
-            <span className="text-sm font-medium text-primary hover:underline flex items-center cursor-pointer">
-              View All <ChevronRight className="h-4 w-4" />
-            </span>
-          </Link>
-        </div>
+      <section className="grid gap-6 md:grid-cols-2 mb-8">
+        <CardioMetrics />
 
         <div className="space-y-4">
-          {lastWorkout ? (
-            <Card className="border-none shadow-sm hover:bg-accent/5 transition-colors cursor-pointer">
-              <CardContent className="p-4 flex items-center gap-4">
-                <div className="h-12 w-12 rounded-xl bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center">
-                  <Calendar className="h-6 w-6" />
-                </div>
-                <div className="flex-1">
-                  <h4 className="font-bold font-heading">{lastWorkout.name || "Workout Session"}</h4>
-                  <p className="text-sm text-muted-foreground">
-                    {format(new Date(lastWorkout.date), "MMM d")} • {lastWorkout.exercises?.length || 0} exercises
-                  </p>
-                </div>
-                <ChevronRight className="h-5 w-5 text-muted-foreground" />
-              </CardContent>
-            </Card>
-          ) : (
-            <p className="text-sm text-muted-foreground text-center py-8">No recent workouts</p>
-          )}
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-bold font-heading">Recent Activity</h2>
+            <Link href="/history">
+              <span className="text-sm font-medium text-primary hover:underline flex items-center cursor-pointer">
+                View All <ChevronRight className="h-4 w-4" />
+              </span>
+            </Link>
+          </div>
+
+          <div className="space-y-3">
+            {sessions && sessions.length > 0 ? (
+              sessions.slice(0, 3).map((workout) => (
+                <Card key={workout.id} className="border-none shadow-sm hover:bg-accent/5 transition-colors cursor-pointer">
+                  <CardContent className="p-4 flex items-center gap-4">
+                    <div className="h-12 w-12 rounded-xl bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+                      <Calendar className="h-6 w-6" />
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="font-bold font-heading">{workout.name || "Workout Session"}</h4>
+                      <p className="text-sm text-muted-foreground">
+                        {format(new Date(workout.date), "MMM d")} • {workout.exercises?.length || 0} exercises
+                      </p>
+                    </div>
+                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                  </CardContent>
+                </Card>
+              ))
+            ) : (
+              <Card className="border-none shadow-sm">
+                <CardContent className="p-8 text-center">
+                  <p className="text-sm text-muted-foreground">No recent workouts</p>
+                  <Link href="/workout">
+                    <Button variant="link" className="mt-2">
+                      Start your first workout
+                    </Button>
+                  </Link>
+                </CardContent>
+              </Card>
+            )}
+          </div>
         </div>
       </section>
     </Layout>

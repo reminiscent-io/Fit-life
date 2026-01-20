@@ -88,3 +88,21 @@ export const exerciseNames = pgTable("exercise_names", {
 export const insertExerciseNameSchema = createInsertSchema(exerciseNames);
 export type InsertExerciseName = z.infer<typeof insertExerciseNameSchema>;
 export type ExerciseName = typeof exerciseNames.$inferSelect;
+
+export const cardioSessions = pgTable("cardio_sessions", {
+  id: serial("id").primaryKey(),
+  sessionId: integer("session_id").notNull().references(() => workoutSessions.id, { onDelete: "cascade" }),
+  activityType: text("activity_type").notNull(), // "running", "rowing", "cycling", etc.
+  durationMinutes: real("duration_minutes").notNull(),
+  distanceKm: real("distance_km"),
+  caloriesBurned: integer("calories_burned"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertCardioSessionSchema = createInsertSchema(cardioSessions).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertCardioSession = z.infer<typeof insertCardioSessionSchema>;
+export type CardioSession = typeof cardioSessions.$inferSelect;
