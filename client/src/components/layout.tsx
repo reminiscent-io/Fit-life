@@ -1,6 +1,7 @@
 import { Link, useLocation } from "wouter";
-import { Home, Dumbbell, History, User, Plus } from "lucide-react";
+import { Home, Dumbbell, History, User } from "lucide-react";
 import { cn } from "@/lib/utils";
+import AiCoach from "./ai-coach";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
@@ -17,6 +18,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <main className="max-w-md mx-auto min-h-screen md:max-w-2xl lg:max-w-4xl px-4 py-6 md:px-8">
         {children}
       </main>
+
+      {/* AI Fitness Coach - Available on all pages */}
+      <AiCoach />
 
       {/* Mobile Bottom Nav */}
       <nav className="fixed bottom-0 left-0 right-0 border-t border-border bg-card/80 backdrop-blur-lg safe-area-bottom md:hidden z-50">

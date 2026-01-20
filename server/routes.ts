@@ -2,7 +2,7 @@ import type { Express, Request } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import multer from "multer";
-import { transcribeAudio, parseWorkoutText, generateClarificationQuestion } from "./lib/openai";
+import { transcribeAudio, parseWorkoutText, generateClarificationQuestion, analyzeWorkoutData, type UserFitnessContext } from "./lib/openai";
 import { calculateBMR, activityMultipliers, estimateWorkoutCalories, getDailyCalorieTarget, lbsToKg, calculateMovingAverage } from "./lib/calculations";
 import { insertWeightLogSchema, insertWorkoutSessionSchema, insertExerciseSchema, insertCardioSessionSchema } from "@shared/schema";
 
@@ -308,6 +308,77 @@ export async function registerRoutes(
     const activityType = req.query.type as string | undefined;
     const summary = await storage.getCardioSummary(req.user.id, activityType);
     res.json(summary);
+  });
+
+  // AI Fitness Coach endpoint
+  app.post("/api/analytics/ask", async (req: any, res) => {
+    const { question } = req.body;
+
+    if (!question || typeof question !== "string") {
+      return res.status(400).json({ error: "Question is required" });
+    }
+
+    try {
+      // Gather comprehensive user data
+      const user = await storage.getUser(req.user.id);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const [comprehensiveData, weightLogs, workoutCount, uniqueExercises, cardioSummary] = await Promise.all([
+        storage.getComprehensiveUserData(req.user.id),
+        storage.getWeightLogs(req.user.id, 90), // Last 90 days of weight data
+        storage.getWorkoutCount(req.user.id),
+        storage.getUniqueExerciseNames(req.user.id),
+        storage.getCardioSummary(req.user.id)
+      ]);
+
+      // Build the context for the AI
+      const context: UserFitnessContext = {
+        profile: {
+          name: user.name,
+          age: user.age ?? undefined,
+          heightCm: user.heightCm ?? undefined,
+          sex: user.sex ?? undefined,
+          activityLevel: user.activityLevel ?? undefined,
+          targetWeight: user.targetWeight ?? undefined,
+          weeklyGoal: user.weeklyGoal ?? undefined,
+        },
+        workouts: comprehensiveData.workouts.map(w => ({
+          date: w.date,
+          name: w.name ?? undefined,
+          exercises: w.exercises.map(e => ({
+            exerciseName: e.exerciseName,
+            sets: e.sets,
+            reps: e.reps,
+            weight: e.weight ?? undefined,
+            weightUnit: e.weightUnit ?? undefined,
+          })),
+          cardio: w.cardio.map(c => ({
+            activityType: c.activityType,
+            durationMinutes: c.durationMinutes,
+            distanceKm: c.distanceKm ?? undefined,
+            caloriesBurned: c.caloriesBurned ?? undefined,
+          })),
+        })),
+        weightHistory: weightLogs.map(w => ({
+          date: w.date,
+          weight: w.weight,
+        })),
+        stats: {
+          totalWorkouts: workoutCount,
+          uniqueExercises,
+          cardioSummary,
+        },
+      };
+
+      // Get AI analysis
+      const insight = await analyzeWorkoutData(context, question);
+      res.json(insight);
+    } catch (error: any) {
+      console.error("AI analytics error:", error);
+      res.status(500).json({ error: error.message || "Failed to analyze workout data" });
+    }
   });
 
   // Cardio session endpoints

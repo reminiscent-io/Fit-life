@@ -12,5 +12,16 @@ export const client = new pg.Client({
   connectionString: process.env.DATABASE_URL,
 });
 
-await client.connect();
+// Connect lazily to avoid top-level await issues with build
+let connected = false;
+async function ensureConnected() {
+  if (!connected) {
+    await client.connect();
+    connected = true;
+  }
+}
+
+// Connect immediately but handle it async
+ensureConnected().catch(console.error);
+
 export const db = drizzle({ client, schema, casing: "snake_case" });
